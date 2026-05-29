@@ -6,76 +6,58 @@ on:
       docker_images:
         description: '请填写docker镜像名称 多个用英文逗号分开'
         required: true
-        default: 'alpine:latest,ubuntu:latest'
+        default: 'mikebrady/shairport-sync:5.0.4'
 
 jobs:
   pull_and_package:
     runs-on: ubuntu-latest
-    # 必须加这个权限才能上传制品
     permissions:
       actions: write
       contents: read
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Pull, Save & Upload Each Image
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # 获取输入并去空格
-        images="${{ github.event.inputs.docker_images }}"
-        images=$(echo "$images" | tr -d ' ')
-        
-        if [ -z "$images" ]; then
-          echo "未输入镜像"
-          exit 0
-        fi
+      - name: Pull & Save
+        run: |
+          images="${{ github.event.inputs.docker_images }}"
+          images=$(echo "$images" | tr -d ' ')
+          IFS=',' read -r -a image_array <<< "$images"
 
-        # 分割镜像数组
-        IFS=',' read -r -a image_array <<< "$images"
+          for image in "${image_array[@]}"; do
+            safe="${image//\//_}"
+            safe="${safe//:/-}"
+            file="${safe}-arm64.tar"
 
-        for image in "${image_array[@]}"; do
-          # 生成安全文件名（核心：替换 / 和 :）
-          safe_name="${image//\//_}"
-          safe_name="${safe_name//:/-}"
-          tar_file="${safe_name}-arm64.tar"
-          
-          echo "===================================="
-          echo "处理镜像：$image"
-          echo "保存为：$tar_file"
-          echo "===================================="
+            echo "Pull: $image"
+            docker pull --platform linux/arm64 "$image"
 
-          # 拉取 ARM64 镜像
-          docker pull --platform linux/arm64 "${image}"
-          
-          # 保存为 tar
-          docker save "${image}" -o "${tar_file}"
+            echo "Save: $file"
+            docker save "$image" -o "$file"
+          done
 
-          # =============================================
-          # 正确上传单个制品（自动用镜像名称命名！）
-          # =============================================
-          echo "正在上传：$tar_file"
-          
-          # 获取上传 URL
-          UPLOAD_URL=$(curl -s -X POST \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Content-Type: application/json" \
-            https://api.github.com/repos/${{ github.repository }}/actions/artifacts \
-            -d "{\"name\":\"${tar_file}\",\"version\":1}" | jq -r '.upload_url')
+      - name: Upload each image
+        run: |
+          images="${{ github.event.inputs.docker_images }}"
+          images=$(echo "$images" | tr -d ' ')
+          IFS=',' read -r -a image_array <<< "$images"
 
-          # 上传文件
-          curl -s --write-out "HTTP Status: %{http_code}\n" \
-            -X PUT \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary @"${tar_file}" \
-            "${UPLOAD_URL}"
-          
-          echo "上传完成：$tar_file"
-        done
+          for image in "${image_array[@]}"; do
+            safe="${image//\//_}"
+            safe="${safe//:/-}"
+            file="${safe}-arm64.tar"
+            echo "Uploading $file ..."
+            echo "::set-output name=imgfile::$file"
+          done
+        id: setfiles
 
-    # 清理
-    - name: Clean up
-      run: rm -f *.tar
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.setfiles.outputs.imgfile }}
+          path: ${{ steps.setfiles.outputs.imgfile }}
+          retention-days: 90
+
+      - name: Clean up
+        run: rm -f *.tar
