@@ -37,20 +37,18 @@ jobs:
             docker save "$image" -o "$file"
           done
 
-      - name: Upload each image
+      # 遍历文件，逐个上传（每个制品自动使用镜像名称）
+      - name: Upload all saved images
         run: |
-          images="${{ github.event.inputs.docker_images }}"
-          images=$(echo "$images" | tr -d ' ')
-          IFS=',' read -r -a image_array <<< "$images"
-
-          for image in "${image_array[@]}"; do
-            safe="${image//\//_}"
-            safe="${safe//:/-}"
-            file="${safe}-arm64.tar"
-            echo "Uploading $file ..."
-            echo "::set-output name=imgfile::$file"
+          for tar_file in *.tar; do
+            echo "上传：$tar_file"
+            # 动态上传，每个文件一个制品，名字就是文件名
+            cat << EOF >> "$GITHUB_OUTPUT"
+              path=$tar_file
+              name=$tar_file
+          EOF
           done
-        id: setfiles
+        id: uploadvars
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
