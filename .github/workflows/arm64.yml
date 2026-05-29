@@ -9,35 +9,73 @@ on:
         default: 'alpine:latest,ubuntu:latest'
 
 jobs:
-  pull-and-save:
+  pull_and_package:
     runs-on: ubuntu-latest
+    # 必须加这个权限才能上传制品
+    permissions:
+      actions: write
+      contents: read
+
     steps:
-      - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Pull and save each Docker image
-        run: |
-          images="${{ github.event.inputs.docker_images }}"
-          images=$(echo "$images" | tr -d ' ')
-          IFS=',' read -r -a img_arr <<< "$images"
+    - name: Pull, Save & Upload Each Image
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # 获取输入并去空格
+        images="${{ github.event.inputs.docker_images }}"
+        images=$(echo "$images" | tr -d ' ')
+        
+        if [ -z "$images" ]; then
+          echo "未输入镜像"
+          exit 0
+        fi
 
-          for image in "${img_arr[@]}"; do
-            # 自动处理非法字符
-            safe_name="${image//\//_}"
-            safe_name="${safe_name//:/-}"
-            tar_file="${safe_name}-arm64.tar"
+        # 分割镜像数组
+        IFS=',' read -r -a image_array <<< "$images"
 
-            echo "===================================="
-            echo "镜像：$image"
-            echo "保存为：$tar_file"
-            echo "===================================="
+        for image in "${image_array[@]}"; do
+          # 生成安全文件名（核心：替换 / 和 :）
+          safe_name="${image//\//_}"
+          safe_name="${safe_name//:/-}"
+          tar_file="${safe_name}-arm64.tar"
+          
+          echo "===================================="
+          echo "处理镜像：$image"
+          echo "保存为：$tar_file"
+          echo "===================================="
 
-            docker pull --platform linux/arm64 "$image"
-            docker save "$image" -o "$tar_file"
+          # 拉取 ARM64 镜像
+          docker pull --platform linux/arm64 "${image}"
+          
+          # 保存为 tar
+          docker save "${image}" -o "${tar_file}"
 
-            # 循环内直接上传，自动用镜像名称
-            echo "上传：$tar_file"
-            gh artifact upload "$tar_file" "$tar_file"
-          done
+          # =============================================
+          # 正确上传单个制品（自动用镜像名称命名！）
+          # =============================================
+          echo "正在上传：$tar_file"
+          
+          # 获取上传 URL
+          UPLOAD_URL=$(curl -s -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/artifacts \
+            -d "{\"name\":\"${tar_file}\",\"version\":1}" | jq -r '.upload_url')
 
-      - name: Clean
-        run: rm -f *.tar
+          # 上传文件
+          curl -s --write-out "HTTP Status: %{http_code}\n" \
+            -X PUT \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"${tar_file}" \
+            "${UPLOAD_URL}"
+          
+          echo "上传完成：$tar_file"
+        done
+
+    # 清理
+    - name: Clean up
+      run: rm -f *.tar
