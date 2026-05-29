@@ -3,8 +3,8 @@ name: ARM64 Pull and Save Docker Image
 on:
   workflow_dispatch:
     inputs:
-      docker_images:
-        description: '请填写docker镜像名称 多个用英文逗号分开'
+      docker_image:
+        description: '请填写 docker 镜像名称'
         required: true
         default: 'mikebrady/shairport-sync:5.0.4'
 
@@ -14,51 +14,42 @@ jobs:
     permissions:
       actions: write
       contents: read
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 拉取并保存所有镜像（生成合法文件名）
-      - name: Pull and save Docker images
+      # 直接拉取 1 个镜像并保存
+      - name: Pull and Save Image
         run: |
-          images="${{ github.event.inputs.docker_images }}"
-          images=$(echo "$images" | tr -d ' ')
-          IFS=',' read -r -a img_arr <<< "$images"
+          image="${{ github.event.inputs.docker_image }}"
+          
+          # 生成安全文件名（替换 / 和 :）
+          safe="${image//\//_}"
+          safe="${safe//:/-}"
+          file="${safe}-arm64.tar"
 
-          for image in "${img_arr[@]}"; do
-            safe_name="${image//\//_}"
-            safe_name="${safe_name//:/-}"
-            tar_file="${safe_name}-arm64.tar"
-            
-            echo "====================================="
-            echo "处理镜像：$image"
-            echo "保存文件：$tar_file"
-            echo "====================================="
-            
-            docker pull --platform linux/arm64 "$image"
-            docker save "$image" -o "$tar_file"
-          done
+          echo "====================================="
+          echo "镜像：$image"
+          echo "保存为：$file"
+          echo "====================================="
 
-      # 遍历文件，逐个上传（每个制品自动使用镜像名称）
-      - name: Upload all saved images
-        run: |
-          for tar_file in *.tar; do
-            echo "上传：$tar_file"
-            # 动态上传，每个文件一个制品，名字就是文件名
-            cat << EOF >> "$GITHUB_OUTPUT"
-              path=$tar_file
-              name=$tar_file
-          EOF
-          done
-        id: uploadvars
+          docker pull --platform linux/arm64 "$image"
+          docker save "$image" -o "$file"
 
-      - name: Upload artifact
+          # 把文件名传给下一步
+          echo "file=$file" >> $GITHUB_ENV
+
+      # 官方上传：自动使用镜像名称命名
+      - name: Upload Docker Image
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.uploadvars.outputs.name }}
-          path: ${{ steps.uploadvars.outputs.path }}
+          name: ${{ env.file }}
+          path: ${{ env.file }}
           retention-days: 90
 
+      # 清理
       - name: Clean up
         run: rm -f *.tar
