@@ -19,22 +19,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Pull & Save
+      # 拉取并保存所有镜像（生成合法文件名）
+      - name: Pull and save Docker images
         run: |
           images="${{ github.event.inputs.docker_images }}"
           images=$(echo "$images" | tr -d ' ')
-          IFS=',' read -r -a image_array <<< "$images"
+          IFS=',' read -r -a img_arr <<< "$images"
 
-          for image in "${image_array[@]}"; do
-            safe="${image//\//_}"
-            safe="${safe//:/-}"
-            file="${safe}-arm64.tar"
-
-            echo "Pull: $image"
+          for image in "${img_arr[@]}"; do
+            safe_name="${image//\//_}"
+            safe_name="${safe_name//:/-}"
+            tar_file="${safe_name}-arm64.tar"
+            
+            echo "====================================="
+            echo "处理镜像：$image"
+            echo "保存文件：$tar_file"
+            echo "====================================="
+            
             docker pull --platform linux/arm64 "$image"
-
-            echo "Save: $file"
-            docker save "$image" -o "$file"
+            docker save "$image" -o "$tar_file"
           done
 
       # 遍历文件，逐个上传（每个制品自动使用镜像名称）
