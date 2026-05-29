@@ -6,38 +6,38 @@ on:
       docker_images:
         description: '请填写docker镜像名称 多个用英文逗号分开'
         required: true
-        default: 'alpine:latest,ubuntu:latest'  # 设置默认的 Docker 镜像列表
+        default: 'alpine:latest,ubuntu:latest'
 
 jobs:
-  pull_and_package:
+  pull-and-save:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Pull Docker Images and Package
-      run: |
-        images="${{ github.event.inputs.docker_images }}"
-        IFS=',' read -r -a image_array <<< "$images"
-        for image in "${image_array[@]}"; do
-         # 处理镜像名称：替换 / 为 _，替换 : 为 -
-          safe_image_name="${image//\//_}"
-          safe_image_name="${safe_image_name//:/-}"
-          docker pull "${image}" --platform "linux/arm64"
-          docker save "${image}" -o "${safe_image_name}-arm64.tar"
-        done
+      - name: Pull and save each Docker image
+        run: |
+          images="${{ github.event.inputs.docker_images }}"
+          images=$(echo "$images" | tr -d ' ')
+          IFS=',' read -r -a img_arr <<< "$images"
 
-    # - name: Compress the TAR files
-    #   run: tar -czf arm64-images.tar.gz *-arm64.tar
+          for image in "${img_arr[@]}"; do
+            # 自动处理非法字符
+            safe_name="${image//\//_}"
+            safe_name="${safe_name//:/-}"
+            tar_file="${safe_name}-arm64.tar"
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: docker-images-"${safe_image_name}-arm64.tar"
-        path: "*-arm64.tar"
-        retention-days: 90  # 将保留天数设置为 1 天 最多可设置90天
+            echo "===================================="
+            echo "镜像：$image"
+            echo "保存为：$tar_file"
+            echo "===================================="
 
-    - name: Clean up intermediate files
-      run: |
-        rm *-arm64.tar
+            docker pull --platform linux/arm64 "$image"
+            docker save "$image" -o "$tar_file"
+
+            # 循环内直接上传，自动用镜像名称
+            echo "上传：$tar_file"
+            gh artifact upload "$tar_file" "$tar_file"
+          done
+
+      - name: Clean
+        run: rm -f *.tar
