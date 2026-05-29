@@ -53,8 +53,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.setfiles.outputs.imgfile }}
-          path: ${{ steps.setfiles.outputs.imgfile }}
+          name: ${{ steps.uploadvars.outputs.name }}
+          path: ${{ steps.uploadvars.outputs.path }}
           retention-days: 90
 
       - name: Clean up
