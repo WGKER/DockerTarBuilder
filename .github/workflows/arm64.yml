@@ -6,7 +6,7 @@ on:
       docker_image:
         description: '请填写 docker 镜像名称'
         required: true
-        default: 'mikebrady/shairport-sync:5.0.4'
+        default: 'mikebrady/shairport-sync:5.0.4 songloft/songloft:2.8.2'
 
 jobs:
   pull_and_package:
