@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       docker_image:
-        description: '请填写 docker 镜像名称'
+        description: '请填写 docker 镜像名:标签'
         required: true
         default: 'mikebrady/shairport-sync:5.0.4或songloft/songloft:2.8.2'
 
@@ -46,7 +46,7 @@ jobs:
       - name: Upload Docker Image
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.file }}（DTB拉取的镜像）
+          name: （DTB拉取的镜像）${{ env.file }}
           path: ${{ env.file }}
           retention-days: 90
 
