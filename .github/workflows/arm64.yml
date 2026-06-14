@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       docker_image:
-        description: '请填写 docker 镜像名:标签'
+        description: '请填写 docker 镜像名和标签'
         required: true
         default: 'mikebrady/shairport-sync:5.0.4或songloft/songloft:2.8.2'
 
